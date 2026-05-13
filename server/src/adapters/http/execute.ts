@@ -26,15 +26,32 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       ...(timer ? { signal: controller.signal } : {}),
     });
 
-    if (!res.ok) {
-      throw new Error(`HTTP invoke failed with status ${res.status}`);
+    const contentType = res.headers.get("content-type") ?? "";
+    const responseText = await res.text();
+    let responseJson: Record<string, unknown> | null = null;
+    if (contentType.includes("application/json") && responseText.trim()) {
+      const parsed = JSON.parse(responseText) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        responseJson = parsed as Record<string, unknown>;
+      }
     }
+
+    if (!res.ok) {
+      const detail = responseJson?.error ?? responseJson?.message ?? responseText.slice(0, 300);
+      throw new Error(`HTTP invoke failed with status ${res.status}${detail ? `: ${String(detail)}` : ""}`);
+    }
+
+    const remoteSummary =
+      typeof responseJson?.summary === "string" && responseJson.summary.trim().length > 0
+        ? responseJson.summary.trim()
+        : null;
 
     return {
       exitCode: 0,
       signal: null,
       timedOut: false,
-      summary: `HTTP ${method} ${url}`,
+      summary: remoteSummary ?? `HTTP ${method} ${url}`,
+      resultJson: responseJson ?? (responseText ? { responseText } : null),
     };
   } catch (err) {
     if (timer && err instanceof Error && err.name === "AbortError") {
