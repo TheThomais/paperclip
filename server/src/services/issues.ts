@@ -1955,6 +1955,10 @@ export function issueService(db: Db) {
       return max === null ? timestamp : Math.max(max, timestamp);
     }, null);
     if (minCommentCreatedAtMs === null || maxCommentCreatedAtMs === null) return comments;
+    const windowStartIso = new Date(minCommentCreatedAtMs).toISOString();
+    const windowEndIso = new Date(
+      maxCommentCreatedAtMs + ISSUE_COMMENT_RUN_LOG_DERIVATION_END_SLACK_MS,
+    ).toISOString();
 
     const runs = await db
       .select({
@@ -1982,8 +1986,8 @@ export function issueService(db: Db) {
                 and ${activityLog.runId} = ${heartbeatRuns.id}
             )`,
           ),
-          sql`coalesce(${heartbeatRuns.finishedAt}, ${heartbeatRuns.createdAt}) >= ${new Date(minCommentCreatedAtMs)}`,
-          sql`coalesce(${heartbeatRuns.startedAt}, ${heartbeatRuns.createdAt}) <= ${new Date(maxCommentCreatedAtMs + ISSUE_COMMENT_RUN_LOG_DERIVATION_END_SLACK_MS)}`,
+          sql`coalesce(${heartbeatRuns.finishedAt}, ${heartbeatRuns.createdAt}) >= ${windowStartIso}`,
+          sql`coalesce(${heartbeatRuns.startedAt}, ${heartbeatRuns.createdAt}) <= ${windowEndIso}`,
         ),
       )
       .orderBy(desc(heartbeatRuns.createdAt));
