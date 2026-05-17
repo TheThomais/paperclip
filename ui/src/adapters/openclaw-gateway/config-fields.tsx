@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, SlidersHorizontal } from "lucide-react";
 import type { AdapterConfigFieldsProps } from "../types";
 import {
+  CollapsibleSection,
   Field,
   DraftInput,
   help,
@@ -96,152 +97,174 @@ export function OpenClawGatewayConfigFields({
     String(config.sessionKeyStrategy ?? "fixed"),
   );
 
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
   return (
-    <>
-      <Field label="Gateway URL" hint={help.webhookUrl}>
-        <DraftInput
-          value={
-            isCreate
-              ? values!.url
-              : eff("adapterConfig", "url", String(config.url ?? ""))
-          }
-          onCommit={(v) =>
-            isCreate
-              ? set!({ url: v })
-              : mark("adapterConfig", "url", v || undefined)
-          }
-          immediate
-          className={inputClass}
-          placeholder="ws://127.0.0.1:18789"
-        />
-      </Field>
+    <div className="space-y-4">
+      <div className="rounded-lg border border-border bg-card/40 p-3 space-y-3">
+        <div>
+          <div className="text-sm font-medium">OpenClaw connection</div>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Set the gateway and token. Everything else is tucked away unless you need to debug a custom pairing.
+          </p>
+        </div>
 
-      <PayloadTemplateJsonField
-        isCreate={isCreate}
-        values={values}
-        set={set}
-        config={config}
-        mark={mark}
-      />
+        <Field label="Gateway URL" hint={help.webhookUrl}>
+          <DraftInput
+            value={
+              isCreate
+                ? values!.url
+                : eff("adapterConfig", "url", String(config.url ?? ""))
+            }
+            onCommit={(v) =>
+              isCreate
+                ? set!({ url: v })
+                : mark("adapterConfig", "url", v || undefined)
+            }
+            immediate
+            className={inputClass}
+            placeholder="ws://127.0.0.1:18789"
+          />
+        </Field>
 
-      <RuntimeServicesJsonField
-        isCreate={isCreate}
-        values={values}
-        set={set}
-        config={config}
-        mark={mark}
-      />
-
-      {!isCreate && (
-        <>
-          <Field label="Paperclip API URL override">
-            <DraftInput
-              value={
-                eff(
-                  "adapterConfig",
-                  "paperclipApiUrl",
-                  String(config.paperclipApiUrl ?? ""),
-                )
-              }
-              onCommit={(v) => mark("adapterConfig", "paperclipApiUrl", v || undefined)}
-              immediate
-              className={inputClass}
-              placeholder="https://paperclip.example"
-            />
-          </Field>
-
-          <Field label="Claimed API key path">
-            <DraftInput
-              value={eff("adapterConfig", "claimedApiKeyPath", String(config.claimedApiKeyPath ?? ""))}
-              onCommit={(v) => mark("adapterConfig", "claimedApiKeyPath", v || undefined)}
-              immediate
-              className={inputClass}
-              placeholder="~/.openclaw/workspace/paperclip-claimed-api-key.json"
-            />
-          </Field>
-
-          <Field label="Session strategy">
-            <select
-              value={sessionStrategy}
-              onChange={(e) => mark("adapterConfig", "sessionKeyStrategy", e.target.value)}
-              className={inputClass}
-            >
-              <option value="fixed">Fixed</option>
-              <option value="issue">Per issue</option>
-              <option value="run">Per run</option>
-            </select>
-          </Field>
-
-          {sessionStrategy === "fixed" && (
-            <Field label="Session key">
-              <DraftInput
-                value={eff("adapterConfig", "sessionKey", String(config.sessionKey ?? "paperclip"))}
-                onCommit={(v) => mark("adapterConfig", "sessionKey", v || undefined)}
-                immediate
-                className={inputClass}
-                placeholder="paperclip"
-              />
-            </Field>
-          )}
-
+        {!isCreate && (
           <SecretField
-            label="Gateway auth token (x-openclaw-token)"
+            label="Gateway token"
             value={effectiveGatewayToken}
             onCommit={commitGatewayToken}
-            placeholder="OpenClaw gateway token"
+            placeholder="Stored as x-openclaw-token"
+          />
+        )}
+      </div>
+
+      <CollapsibleSection
+        title="Advanced gateway settings"
+        icon={<SlidersHorizontal className="h-3 w-3" />}
+        open={advancedOpen}
+        onToggle={() => setAdvancedOpen((open) => !open)}
+        bordered
+      >
+        <div className="space-y-3">
+          <PayloadTemplateJsonField
+            isCreate={isCreate}
+            values={values}
+            set={set}
+            config={config}
+            mark={mark}
           />
 
-          <Field label="Role">
-            <DraftInput
-              value={eff("adapterConfig", "role", String(config.role ?? "operator"))}
-              onCommit={(v) => mark("adapterConfig", "role", v || undefined)}
-              immediate
-              className={inputClass}
-              placeholder="operator"
-            />
-          </Field>
+          <RuntimeServicesJsonField
+            isCreate={isCreate}
+            values={values}
+            set={set}
+            config={config}
+            mark={mark}
+          />
 
-          <Field label="Scopes (comma-separated)">
-            <DraftInput
-              value={eff("adapterConfig", "scopes", parseScopes(config.scopes ?? ["operator.admin"]))}
-              onCommit={(v) => {
-                const parsed = v
-                  .split(",")
-                  .map((entry) => entry.trim())
-                  .filter(Boolean);
-                mark("adapterConfig", "scopes", parsed.length > 0 ? parsed : undefined);
-              }}
-              immediate
-              className={inputClass}
-              placeholder="operator.admin"
-            />
-          </Field>
+          {!isCreate && (
+            <>
+              <Field label="Paperclip API URL override">
+                <DraftInput
+                  value={
+                    eff(
+                      "adapterConfig",
+                      "paperclipApiUrl",
+                      String(config.paperclipApiUrl ?? ""),
+                    )
+                  }
+                  onCommit={(v) => mark("adapterConfig", "paperclipApiUrl", v || undefined)}
+                  immediate
+                  className={inputClass}
+                  placeholder="https://paperclip.example"
+                />
+              </Field>
 
-          <Field label="Wait timeout (ms)">
-            <DraftInput
-              value={eff("adapterConfig", "waitTimeoutMs", String(config.waitTimeoutMs ?? "120000"))}
-              onCommit={(v) => {
-                const parsed = Number.parseInt(v.trim(), 10);
-                mark(
-                  "adapterConfig",
-                  "waitTimeoutMs",
-                  Number.isFinite(parsed) && parsed > 0 ? parsed : undefined,
-                );
-              }}
-              immediate
-              className={inputClass}
-              placeholder="120000"
-            />
-          </Field>
+              <Field label="Claimed API key path">
+                <DraftInput
+                  value={eff("adapterConfig", "claimedApiKeyPath", String(config.claimedApiKeyPath ?? ""))}
+                  onCommit={(v) => mark("adapterConfig", "claimedApiKeyPath", v || undefined)}
+                  immediate
+                  className={inputClass}
+                  placeholder="~/.openclaw/workspace/paperclip-claimed-api-key.json"
+                />
+              </Field>
 
-          <Field label="Device auth">
-            <div className="text-xs text-muted-foreground leading-relaxed">
-              Always enabled for gateway agents. Paperclip persists a device key during onboarding so pairing approvals
-              remain stable across runs.
-            </div>
-          </Field>
-        </>
-      )}
-    </>
+              <Field label="Session strategy">
+                <select
+                  value={sessionStrategy}
+                  onChange={(e) => mark("adapterConfig", "sessionKeyStrategy", e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="fixed">Fixed</option>
+                  <option value="issue">Per issue</option>
+                  <option value="run">Per run</option>
+                </select>
+              </Field>
+
+              {sessionStrategy === "fixed" && (
+                <Field label="Session key">
+                  <DraftInput
+                    value={eff("adapterConfig", "sessionKey", String(config.sessionKey ?? "paperclip"))}
+                    onCommit={(v) => mark("adapterConfig", "sessionKey", v || undefined)}
+                    immediate
+                    className={inputClass}
+                    placeholder="paperclip"
+                  />
+                </Field>
+              )}
+
+              <Field label="Role">
+                <DraftInput
+                  value={eff("adapterConfig", "role", String(config.role ?? "operator"))}
+                  onCommit={(v) => mark("adapterConfig", "role", v || undefined)}
+                  immediate
+                  className={inputClass}
+                  placeholder="operator"
+                />
+              </Field>
+
+              <Field label="Scopes">
+                <DraftInput
+                  value={eff("adapterConfig", "scopes", parseScopes(config.scopes ?? ["operator.admin"]))}
+                  onCommit={(v) => {
+                    const parsed = v
+                      .split(",")
+                      .map((entry) => entry.trim())
+                      .filter(Boolean);
+                    mark("adapterConfig", "scopes", parsed.length > 0 ? parsed : undefined);
+                  }}
+                  immediate
+                  className={inputClass}
+                  placeholder="operator.admin"
+                />
+              </Field>
+
+              <Field label="Wait timeout (ms)">
+                <DraftInput
+                  value={eff("adapterConfig", "waitTimeoutMs", String(config.waitTimeoutMs ?? "120000"))}
+                  onCommit={(v) => {
+                    const parsed = Number.parseInt(v.trim(), 10);
+                    mark(
+                      "adapterConfig",
+                      "waitTimeoutMs",
+                      Number.isFinite(parsed) && parsed > 0 ? parsed : undefined,
+                    );
+                  }}
+                  immediate
+                  className={inputClass}
+                  placeholder="120000"
+                />
+              </Field>
+
+              <Field label="Device auth">
+                <div className="text-xs text-muted-foreground leading-relaxed">
+                  Always enabled. Paperclip persists a device key during onboarding so approvals stay stable across runs.
+                </div>
+              </Field>
+            </>
+          )}
+        </div>
+      </CollapsibleSection>
+    </div>
   );
 }
