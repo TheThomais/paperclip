@@ -38,6 +38,11 @@ import {
 } from "../lib/onboarding-launch";
 import { buildNewAgentRuntimeConfig } from "../lib/new-agent-runtime-config";
 import {
+  getDefaultHltUseCase,
+  getHltUseCaseStarterExamples,
+  type HltUseCaseStarterExample,
+} from "../lib/hlt-use-case-catalog";
+import {
   DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX,
   DEFAULT_CODEX_LOCAL_MODEL
 } from "@paperclipai/adapter-codex-local";
@@ -63,76 +68,10 @@ import {
 type Step = 1 | 2 | 3 | 4;
 type AdapterType = string;
 
-type StarterTaskExample = {
-  label: string;
-  title: string;
-  description: string;
-};
-
-const DEFAULT_TASK_TITLE = "Set up the first operator loop";
-
-const DEFAULT_TASK_DESCRIPTION = `You are the first operator agent. Start with one useful loop.
-
-- decide what needs watching
-- define the handoff back to a human
-- create the first small task another agent or tool can run next`;
-
-const STARTER_TASK_EXAMPLES: StarterTaskExample[] = [
-  {
-    label: "Telegram inbox",
-    title: "Create a Telegram operator inbox",
-    description: `Design a Telegram-first operator loop for this company.
-
-- choose the alerts worth sending to Telegram
-- propose short commands or buttons for common replies
-- define when to create a Paperclip issue instead of sending another chat message`,
-  },
-  {
-    label: "Support triage",
-    title: "Triage new customer messages",
-    description: `Turn incoming customer messages into an action queue.
-
-- group the last messages by bug, billing, feature request, and urgent blocker
-- draft the first human-safe reply for each group
-- create follow-up issues for anything an agent can investigate`,
-  },
-  {
-    label: "Content team",
-    title: "Plan a one-week content sprint",
-    description: `Act as a small content team lead.
-
-- pick three useful topics from customer/product context
-- assign research, draft, review, and distribution work
-- mark what needs approval before anything is published`,
-  },
-  {
-    label: "Incident watcher",
-    title: "Set up an incident watch loop",
-    description: `Create a simple incident response loop for deploys, CI, or uptime alerts.
-
-- define which failures should page Telegram/Slack/Discord
-- separate notify-only alerts from agent-investigation work
-- write the first runbook issue for a failing check`,
-  },
-  {
-    label: "Research desk",
-    title: "Build a daily research brief",
-    description: `Create a daily research workflow.
-
-- choose three sources to monitor
-- summarize only changes that affect decisions
-- create follow-up issues for deeper analysis instead of dumping links`,
-  },
-  {
-    label: "Agent team",
-    title: "Split work across a small agent team",
-    description: `Design the first multi-agent handoff.
-
-- name one lead agent and two specialist agents
-- define what each agent owns and when it must ask for review
-- create the first child issues with clear done/blocker states`,
-  },
-];
+const STARTER_TASK_EXAMPLES = getHltUseCaseStarterExamples();
+const DEFAULT_USE_CASE = getDefaultHltUseCase();
+const DEFAULT_TASK_TITLE = DEFAULT_USE_CASE.defaultTaskTitle;
+const DEFAULT_TASK_DESCRIPTION = DEFAULT_USE_CASE.defaultTaskDescription;
 
 export function OnboardingWizard() {
   const { onboardingOpen, onboardingOptions, closeOnboarding } = useDialog();
@@ -190,6 +129,7 @@ export function OnboardingWizard() {
   const [showMoreAdapters, setShowMoreAdapters] = useState(false);
 
   // Step 3
+  const [selectedUseCase, setSelectedUseCase] = useState(DEFAULT_USE_CASE);
   const [taskTitle, setTaskTitle] = useState(DEFAULT_TASK_TITLE);
   const [taskDescription, setTaskDescription] = useState(
     DEFAULT_TASK_DESCRIPTION
@@ -366,6 +306,7 @@ export function OnboardingWizard() {
     setUnsetAnthropicLoading(false);
     setTaskTitle(DEFAULT_TASK_TITLE);
     setTaskDescription(DEFAULT_TASK_DESCRIPTION);
+    setSelectedUseCase(DEFAULT_USE_CASE);
     setCreatedCompanyId(null);
     setCreatedCompanyPrefix(null);
     setCreatedCompanyGoalId(null);
@@ -379,7 +320,8 @@ export function OnboardingWizard() {
     closeOnboarding();
   }
 
-  function applyStarterTaskExample(example: StarterTaskExample) {
+  function applyStarterTaskExample(example: HltUseCaseStarterExample) {
+    setSelectedUseCase(example.useCase);
     setTaskTitle(example.title);
     setTaskDescription(example.description);
     requestAnimationFrame(autoResizeTextarea);
@@ -1161,29 +1103,74 @@ export function OnboardingWizard() {
                     <div>
                       <h3 className="font-medium">Give it something to do</h3>
                       <p className="text-xs text-muted-foreground">
-                        Give your agent a small task to start with — a bug fix,
-                        a research question, writing a script.
+                        Choose an outcome first. Paperclip will create the first
+                        task. Extra grounding can be attached later if available.
                       </p>
                     </div>
                   </div>
-                  <div className="space-y-2 rounded-md border border-border/70 bg-muted/10 p-3">
-                    <div>
-                      <p className="text-xs font-medium">Starter examples</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        Pick one or edit freely. These are starting points, not rails.
-                      </p>
+                  <div className="space-y-3 rounded-md border border-border/70 bg-muted/10 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-medium">What do you want done?</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Pick an outcome. These are starting points, not rails.
+                        </p>
+                      </div>
+                      <div className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] text-muted-foreground">
+                        Extra context: optional
+                      </div>
                     </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {STARTER_TASK_EXAMPLES.map((example) => (
-                        <button
-                          key={example.label}
-                          type="button"
-                          className="rounded-full border border-border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-foreground/40 hover:bg-accent hover:text-foreground"
-                          onClick={() => applyStarterTaskExample(example)}
-                        >
-                          {example.label}
-                        </button>
-                      ))}
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {STARTER_TASK_EXAMPLES.map((example) => {
+                        const isSelected = selectedUseCase.id === example.useCase.id;
+                        return (
+                          <button
+                            key={example.useCase.id}
+                            type="button"
+                            className={cn(
+                              "rounded-md border p-3 text-left transition-colors hover:border-foreground/40 hover:bg-accent",
+                              isSelected
+                                ? "border-foreground/50 bg-accent/60"
+                                : "border-border bg-background/60"
+                            )}
+                            onClick={() => applyStarterTaskExample(example)}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <p className="text-sm font-medium">{example.useCase.label}</p>
+                                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                                  {example.useCase.shortDescription}
+                                </p>
+                              </div>
+                              {isSelected && <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {example.useCase.teamRoles.slice(0, 4).map((role) => (
+                                <span
+                                  key={role}
+                                  className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                                >
+                                  {role}
+                                </span>
+                              ))}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="rounded-md border border-border/70 bg-background/70 p-3">
+                      <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
+                        <span>Team:</span>
+                        <span>{selectedUseCase.teamRoles.join(" → ")}</span>
+                      </div>
+                      {selectedUseCase.approvalBoundary && (
+                        <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+                          {selectedUseCase.approvalBoundary}
+                        </p>
+                      )}
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        {selectedUseCase.fallbackBehavior}
+                      </p>
                     </div>
                   </div>
                   <div>
