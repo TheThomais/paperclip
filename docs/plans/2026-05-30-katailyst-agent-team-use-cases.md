@@ -114,11 +114,11 @@ Boundary: tutoring users are not recruiting leads unless they explicitly opt in 
 
 ## 3. Core use cases Paperclip should show first
 
-### A. Publish an HLT article
+### A. Draft and review an HLT article
 
 Visible card copy:
-- **Publish an HLT article**
-- “Find the topic, draft the article, add media ideas, review it, and stop before publishing.”
+- **Draft and review an HLT article**
+- “Find the topic, draft the article, add media ideas, review it, and stop before anything publishes.”
 
 Hidden team:
 - Lead: Victoria or Thomas.
@@ -323,7 +323,7 @@ Proposed flow:
 ### Starter card shelf
 
 First shelf should be:
-- Publish an HLT article
+- Draft and review an HLT article
 - Find article opportunities
 - Turn QBank into content
 - Add or improve a skill
