@@ -73,6 +73,7 @@ import { IssueRelatedWorkPanel } from "../components/IssueRelatedWorkPanel";
 import { IssueMonitorActivityCard } from "../components/IssueMonitorActivityCard";
 import { IssueScheduledRetryCard } from "../components/IssueScheduledRetryCard";
 import { IssueLineageStrip } from "../components/IssueLineageStrip";
+import { IssueOnboardingArticlePlanCard } from "../components/IssueOnboardingArticlePlanCard";
 import { IssueOutcomeCard } from "../components/IssueOutcomeCard";
 import { IssueProperties } from "../components/IssueProperties";
 import { IssueRunLedger } from "../components/IssueRunLedger";
@@ -143,6 +144,8 @@ import {
   getClosedIsolatedExecutionWorkspaceMessage,
   isClosedIsolatedExecutionWorkspace,
   ISSUE_CONTINUATION_SUMMARY_DOCUMENT_KEY,
+  ONBOARDING_STARTER_CONTEXT_DOCUMENT_KEY,
+  parseOnboardingStarterContextDocument,
   type AskUserQuestionsAnswer,
   type AskUserQuestionsInteraction,
   type ActivityEvent,
@@ -1391,6 +1394,22 @@ export function IssueDetail() {
     queryFn: () => activityApi.runsForIssue(issueId!),
     enabled: !!issueId,
     placeholderData: keepPreviousDataForSameQueryTail<RunForIssue[]>(issueId ?? "pending"),
+  });
+  const { data: onboardingStarterContext = null } = useQuery({
+    queryKey: queryKeys.issues.document(issueId!, ONBOARDING_STARTER_CONTEXT_DOCUMENT_KEY),
+    queryFn: async () => {
+      try {
+        const document = await issuesApi.getDocument(issueId!, ONBOARDING_STARTER_CONTEXT_DOCUMENT_KEY);
+        return parseOnboardingStarterContextDocument(document.body);
+      } catch (starterContextError) {
+        if (starterContextError instanceof ApiError && starterContextError.status === 404) {
+          return null;
+        }
+        throw starterContextError;
+      }
+    },
+    enabled: !!issueId,
+    staleTime: 60_000,
   });
 
   const { data: hasActiveRun = false } = useQuery<ActiveRunForIssue | null, Error, boolean>({
@@ -3665,6 +3684,8 @@ export function IssueDetail() {
       <IssueLineageStrip issue={issue} childIssues={childIssues} />
 
       <IssueOutcomeCard issue={issue} runs={outcomeRuns} />
+
+      <IssueOnboardingArticlePlanCard starterContext={onboardingStarterContext} />
 
       <PluginSlotOutlet
         slotTypes={["toolbarButton", "contextMenuItem"]}
