@@ -335,4 +335,46 @@ describe("agent routes adapter validation", () => {
     );
     expect(mockAgentService.update).not.toHaveBeenCalled();
   });
+
+  it("rejects persisted HTTP X-Bridge-Token values unless they are pure env references", async () => {
+    const app = await createApp();
+    const rawRes = await requestApp(app, (baseUrl) =>
+      request(baseUrl)
+        .patch("/api/agents/11111111-1111-4111-8111-111111111111")
+        .send({
+          adapterType: "http",
+          replaceAdapterConfig: true,
+          adapterConfig: {
+            url: "https://example.test/webhook",
+            method: "POST",
+            headers: { "X-Bridge-Token": "raw-token" },
+          },
+        }),
+    );
+
+    expect(rawRes.status, JSON.stringify(rawRes.body)).toBe(422);
+    expect(String(rawRes.body.error ?? rawRes.body.message ?? "")).toContain(
+      "Sensitive HTTP header X-Bridge-Token must use an env reference",
+    );
+
+    const bearerRes = await requestApp(app, (baseUrl) =>
+      request(baseUrl)
+        .patch("/api/agents/11111111-1111-4111-8111-111111111111")
+        .send({
+          adapterType: "http",
+          replaceAdapterConfig: true,
+          adapterConfig: {
+            url: "https://example.test/webhook",
+            method: "POST",
+            headers: { "X-Bridge-Token": "Bearer ${env:BRIDGE_TOKEN}" },
+          },
+        }),
+    );
+
+    expect(bearerRes.status, JSON.stringify(bearerRes.body)).toBe(422);
+    expect(String(bearerRes.body.error ?? bearerRes.body.message ?? "")).toContain(
+      "Sensitive HTTP header X-Bridge-Token must use an env reference",
+    );
+    expect(mockAgentService.update).not.toHaveBeenCalled();
+  });
 });

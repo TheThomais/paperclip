@@ -925,8 +925,15 @@ export function agentRoutes(
     }
   }
 
-  const SENSITIVE_HTTP_HEADER_RE = /^(authorization|cookie|proxy-authorization|x-api-key|x-auth-token|x-access-token)$/i;
+  const SENSITIVE_HTTP_HEADER_RE = /^(authorization|cookie|proxy-authorization|x-api-key|x-auth-token|x-access-token|x-bridge-token)$/i;
   const SENSITIVE_HTTP_HEADER_TEMPLATE_RE = /^(?:Bearer\s+)?\$\{env:[A-Za-z_][A-Za-z0-9_]*\}$/;
+  const PURE_ENV_HTTP_HEADER_TEMPLATE_RE = /^\$\{env:[A-Za-z_][A-Za-z0-9_]*\}$/;
+
+  function isAllowedSensitiveHttpHeaderTemplate(key: string, value: string): boolean {
+    const trimmed = value.trim();
+    if (/^x-bridge-token$/i.test(key)) return PURE_ENV_HTTP_HEADER_TEMPLATE_RE.test(trimmed);
+    return SENSITIVE_HTTP_HEADER_TEMPLATE_RE.test(trimmed);
+  }
 
   function assertPersistableHttpAdapterConfig(
     adapterType: string | null | undefined,
@@ -940,7 +947,7 @@ export function agentRoutes(
       if (typeof value !== "string") {
         throw unprocessable(`HTTP header ${key} must be a string`);
       }
-      if (SENSITIVE_HTTP_HEADER_RE.test(key) && !SENSITIVE_HTTP_HEADER_TEMPLATE_RE.test(value.trim())) {
+      if (SENSITIVE_HTTP_HEADER_RE.test(key) && !isAllowedSensitiveHttpHeaderTemplate(key, value)) {
         throw unprocessable(`Sensitive HTTP header ${key} must use an env reference such as \${env:BRIDGE_TOKEN}`);
       }
     }

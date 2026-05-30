@@ -43,7 +43,7 @@ describe("buildHttpConfig", () => {
         makeValues({
           url: "https://example.test/thomas-bridge/v1/runs",
           httpMethod: "POST",
-          httpHeadersJson: '{"Authorization":"Bearer ${env:BRIDGE_TOKEN}","Content-Type":"application/json"}',
+          httpHeadersJson: '{"X-Bridge-Token":"${env:BRIDGE_TOKEN}","Content-Type":"application/json"}',
           envBindings: {
             BRIDGE_TOKEN: { type: "secret_ref", secretId: "secret-1", version: "latest" },
           },
@@ -56,7 +56,7 @@ describe("buildHttpConfig", () => {
       method: "POST",
       timeoutMs: 600000,
       headers: {
-        Authorization: "Bearer ${env:BRIDGE_TOKEN}",
+        "X-Bridge-Token": "${env:BRIDGE_TOKEN}",
         "Content-Type": "application/json",
       },
       env: {
@@ -96,8 +96,8 @@ describe("buildHttpConfig", () => {
   });
 
   it("rejects raw sensitive header values", () => {
-    expect(() => buildHttpConfig(makeValues({ httpHeadersJson: '{"Authorization":"Bearer raw-token"}' }))).toThrow(
-      /Sensitive HTTP header Authorization must use an env reference/,
+    expect(() => buildHttpConfig(makeValues({ httpHeadersJson: '{"X-Bridge-Token":"raw-token"}' }))).toThrow(
+      /Sensitive HTTP header X-Bridge-Token must use an env reference/,
     );
   });
 
@@ -105,17 +105,28 @@ describe("buildHttpConfig", () => {
     expect(() =>
       buildHttpConfig(
         makeValues({
-          httpHeadersJson: '{"Authorization":"Bearer raw-token ${env:BRIDGE_TOKEN}"}',
+          httpHeadersJson: '{"X-Bridge-Token":"raw-token ${env:BRIDGE_TOKEN}"}',
           envBindings: { BRIDGE_TOKEN: { type: "secret_ref", secretId: "secret-1", version: "latest" } },
         }),
       ),
-    ).toThrow(/Sensitive HTTP header Authorization must use an env reference/);
+    ).toThrow(/Sensitive HTTP header X-Bridge-Token must use an env reference/);
   });
 
   it("requires env bindings for referenced header templates", () => {
     expect(() =>
-      buildHttpConfig(makeValues({ httpHeadersJson: '{"Authorization":"Bearer ${env:BRIDGE_TOKEN}"}' })),
+      buildHttpConfig(makeValues({ httpHeadersJson: '{"X-Bridge-Token":"${env:BRIDGE_TOKEN}"}' })),
     ).toThrow(/HTTP header references missing environment variable: BRIDGE_TOKEN/);
+  });
+
+  it("rejects bearer templates for X-Bridge-Token because the bridge expects the raw token value", () => {
+    expect(() =>
+      buildHttpConfig(
+        makeValues({
+          httpHeadersJson: '{"X-Bridge-Token":"Bearer ${env:BRIDGE_TOKEN}"}',
+          envBindings: { BRIDGE_TOKEN: { type: "secret_ref", secretId: "secret-1", version: "latest" } },
+        }),
+      ),
+    ).toThrow(/Sensitive HTTP header X-Bridge-Token must use an env reference/);
   });
 
   it("builds env bindings from the operator-facing Env bindings JSON field", () => {
@@ -123,7 +134,7 @@ describe("buildHttpConfig", () => {
       buildHttpConfig(
         makeValues({
           url: "https://example.test/thomas-bridge/v1/runs",
-          httpHeadersJson: '{"Authorization":"Bearer ${env:BRIDGE_TOKEN}"}',
+          httpHeadersJson: '{"X-Bridge-Token":"${env:BRIDGE_TOKEN}"}',
           envBindingsJson: '{"BRIDGE_TOKEN":{"type":"secret_ref","secretId":"secret-1","version":"latest"}}',
         }),
       ),

@@ -93,17 +93,67 @@ describe("http adapter execute", () => {
       onLog: async () => {},
     })).rejects.toThrow(/Sensitive HTTP header Authorization must use an env reference/);
   });
+
+  it("rejects raw bridge tokens in persisted header values", async () => {
+    await expect(execute({
+      runId: "run-1",
+      agent: {
+        id: "agent-1",
+        companyId: "company-1",
+        name: "Agent",
+        adapterType: "http",
+        adapterConfig: {},
+      },
+      runtime: {
+        sessionId: null,
+        sessionParams: null,
+        sessionDisplayId: null,
+        taskKey: null,
+      },
+      config: {
+        url: "https://example.test/webhook",
+        headers: { "X-Bridge-Token": "raw-token" },
+      },
+      context: {},
+      onLog: async () => {},
+    })).rejects.toThrow(/Sensitive HTTP header X-Bridge-Token must use an env reference/);
+  });
+
+  it("rejects bearer templates for X-Bridge-Token because the bridge expects the raw token value", async () => {
+    await expect(execute({
+      runId: "run-1",
+      agent: {
+        id: "agent-1",
+        companyId: "company-1",
+        name: "Agent",
+        adapterType: "http",
+        adapterConfig: {},
+      },
+      runtime: {
+        sessionId: null,
+        sessionParams: null,
+        sessionDisplayId: null,
+        taskKey: null,
+      },
+      config: {
+        url: "https://example.test/webhook",
+        headers: { "X-Bridge-Token": "Bearer ${env:BRIDGE_TOKEN}" },
+      },
+      context: {},
+      onLog: async () => {},
+    })).rejects.toThrow(/Sensitive HTTP header X-Bridge-Token must use an env reference/);
+  });
 });
 
 describe("HTTP adapter header templates", () => {
   it("resolves env references in header values", () => {
     expect(
       resolveHeaderTemplates(
-        { Authorization: "Bearer ${env:BRIDGE_TOKEN}", "X-Agent": "florence" },
+        { "X-Bridge-Token": "${env:BRIDGE_TOKEN}", "X-Agent": "florence" },
         { BRIDGE_TOKEN: "token-from-env" },
       ),
     ).toEqual({
-      Authorization: "Bearer token-from-env",
+      "X-Bridge-Token": "token-from-env",
       "X-Agent": "florence",
     });
   });
