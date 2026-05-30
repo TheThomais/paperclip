@@ -5,6 +5,7 @@ import type { Agent, Issue, IssueTreeControlPreview, IssueTreeHold } from "@pape
 import { act, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../api/client";
 import { canBoardResolveRecoveryAction, IssueDetail } from "./IssueDetail";
 
 const mockIssuesApi = vi.hoisted(() => ({
@@ -26,6 +27,7 @@ const mockIssuesApi = vi.hoisted(() => ({
   upsertFeedbackVote: vi.fn(),
   uploadAttachment: vi.fn(),
   deleteAttachment: vi.fn(),
+  getDocument: vi.fn(),
   upsertDocument: vi.fn(),
 }));
 
@@ -781,6 +783,7 @@ describe("IssueDetail", () => {
     mockIssuesApi.listComments.mockResolvedValue([]);
     mockIssuesApi.listAttachments.mockResolvedValue([]);
     mockIssuesApi.listFeedbackVotes.mockResolvedValue([]);
+    mockIssuesApi.getDocument.mockRejectedValue(new ApiError("Not found", 404, { error: "not_found" }));
     mockIssuesApi.markRead.mockResolvedValue({ id: "issue-1", lastReadAt: new Date().toISOString() });
     mockIssuesApi.getTreeControlState.mockResolvedValue({ activePauseHold: null });
     mockIssuesApi.listTreeHolds.mockResolvedValue([]);
@@ -864,6 +867,63 @@ describe("IssueDetail", () => {
     await flushReact();
 
     expect(container.querySelector('[data-status-icon-state="covered"]')?.textContent).toBe("blocked");
+  });
+
+  it("shows a human article creation plan when starter context is attached", async () => {
+    mockIssuesApi.get.mockResolvedValue(createIssue({
+      title: "Draft and review an HLT article",
+      description: "Create a useful student-facing article for MasteryPublishing.",
+    }));
+    mockIssuesApi.getDocument.mockResolvedValue({
+      id: "doc-1",
+      companyId: "company-1",
+      issueId: "issue-1",
+      key: "onboarding_starter_context",
+      title: "Starter context",
+      format: "markdown",
+      latestRevisionId: "rev-1",
+      latestRevisionNumber: 1,
+      createdByAgentId: null,
+      createdByUserId: null,
+      updatedByAgentId: null,
+      updatedByUserId: null,
+      createdAt: new Date("2026-04-21T00:00:00.000Z"),
+      updatedAt: new Date("2026-04-21T00:00:00.000Z"),
+      body: [
+        "# Starter context",
+        "",
+        "```json",
+        JSON.stringify({
+          useCaseId: "draft-review-hlt-article",
+          label: "Draft and review an HLT article",
+          teamRoles: ["Researcher", "Writer", "Media planner", "Editor"],
+          optionalRefs: ["playbook:make-article", "schema:article_v2"],
+          approvalBoundary: "Stops before publishing to MasteryPublishing until a human approves.",
+          fallbackBehavior: "Keep drafting locally if extra context is unavailable.",
+        }),
+        "```",
+      ].join("\n"),
+    });
+
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <IssueDetail />
+        </QueryClientProvider>,
+      );
+    });
+
+    await waitForAssertion(() => {
+      expect(container.textContent).toContain("Article creation plan");
+      expect(container.textContent).toContain("Find a student-valuable topic");
+      expect(container.textContent).toContain("Draft and review the article");
+      expect(container.textContent).toContain("Add useful media ideas");
+      expect(container.textContent).toContain("Stops before publishing to MasteryPublishing until a human approves.");
+      expect(container.textContent).toContain("Researcher");
+      expect(container.textContent).toContain("Editor");
+      expect(container.textContent).not.toContain("playbook:make-article");
+      expect(container.textContent).not.toContain("schema:article_v2");
+    });
   });
 
   it("refreshes subtree pause state after resuming a hold", async () => {
