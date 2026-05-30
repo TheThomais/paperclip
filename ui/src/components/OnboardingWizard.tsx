@@ -63,11 +63,76 @@ import {
 type Step = 1 | 2 | 3 | 4;
 type AdapterType = string;
 
-const DEFAULT_TASK_DESCRIPTION = `You are the CEO. You set the direction for the company.
+type StarterTaskExample = {
+  label: string;
+  title: string;
+  description: string;
+};
 
-- hire a founding engineer
-- write a hiring plan
-- break the roadmap into concrete tasks and start delegating work`;
+const DEFAULT_TASK_TITLE = "Set up the first operator loop";
+
+const DEFAULT_TASK_DESCRIPTION = `You are the first operator agent. Start with one useful loop.
+
+- decide what needs watching
+- define the handoff back to a human
+- create the first small task another agent or tool can run next`;
+
+const STARTER_TASK_EXAMPLES: StarterTaskExample[] = [
+  {
+    label: "Telegram inbox",
+    title: "Create a Telegram operator inbox",
+    description: `Design a Telegram-first operator loop for this company.
+
+- choose the alerts worth sending to Telegram
+- propose short commands or buttons for common replies
+- define when to create a Paperclip issue instead of sending another chat message`,
+  },
+  {
+    label: "Support triage",
+    title: "Triage new customer messages",
+    description: `Turn incoming customer messages into an action queue.
+
+- group the last messages by bug, billing, feature request, and urgent blocker
+- draft the first human-safe reply for each group
+- create follow-up issues for anything an agent can investigate`,
+  },
+  {
+    label: "Content team",
+    title: "Plan a one-week content sprint",
+    description: `Act as a small content team lead.
+
+- pick three useful topics from customer/product context
+- assign research, draft, review, and distribution work
+- mark what needs approval before anything is published`,
+  },
+  {
+    label: "Incident watcher",
+    title: "Set up an incident watch loop",
+    description: `Create a simple incident response loop for deploys, CI, or uptime alerts.
+
+- define which failures should page Telegram/Slack/Discord
+- separate notify-only alerts from agent-investigation work
+- write the first runbook issue for a failing check`,
+  },
+  {
+    label: "Research desk",
+    title: "Build a daily research brief",
+    description: `Create a daily research workflow.
+
+- choose three sources to monitor
+- summarize only changes that affect decisions
+- create follow-up issues for deeper analysis instead of dumping links`,
+  },
+  {
+    label: "Agent team",
+    title: "Split work across a small agent team",
+    description: `Design the first multi-agent handoff.
+
+- name one lead agent and two specialist agents
+- define what each agent owns and when it must ask for review
+- create the first child issues with clear done/blocker states`,
+  },
+];
 
 export function OnboardingWizard() {
   const { onboardingOpen, onboardingOptions, closeOnboarding } = useDialog();
@@ -125,9 +190,7 @@ export function OnboardingWizard() {
   const [showMoreAdapters, setShowMoreAdapters] = useState(false);
 
   // Step 3
-  const [taskTitle, setTaskTitle] = useState(
-    "Hire your first engineer and create a hiring plan"
-  );
+  const [taskTitle, setTaskTitle] = useState(DEFAULT_TASK_TITLE);
   const [taskDescription, setTaskDescription] = useState(
     DEFAULT_TASK_DESCRIPTION
   );
@@ -301,7 +364,7 @@ export function OnboardingWizard() {
     setAdapterEnvLoading(false);
     setForceUnsetAnthropicApiKey(false);
     setUnsetAnthropicLoading(false);
-    setTaskTitle("Hire your first engineer and create a hiring plan");
+    setTaskTitle(DEFAULT_TASK_TITLE);
     setTaskDescription(DEFAULT_TASK_DESCRIPTION);
     setCreatedCompanyId(null);
     setCreatedCompanyPrefix(null);
@@ -314,6 +377,12 @@ export function OnboardingWizard() {
   function handleClose() {
     reset();
     closeOnboarding();
+  }
+
+  function applyStarterTaskExample(example: StarterTaskExample) {
+    setTaskTitle(example.title);
+    setTaskDescription(example.description);
+    requestAnimationFrame(autoResizeTextarea);
   }
 
   function buildAdapterConfig(): Record<string, unknown> {
@@ -1095,6 +1164,26 @@ export function OnboardingWizard() {
                         Give your agent a small task to start with — a bug fix,
                         a research question, writing a script.
                       </p>
+                    </div>
+                  </div>
+                  <div className="space-y-2 rounded-md border border-border/70 bg-muted/10 p-3">
+                    <div>
+                      <p className="text-xs font-medium">Starter examples</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Pick one or edit freely. These are starting points, not rails.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {STARTER_TASK_EXAMPLES.map((example) => (
+                        <button
+                          key={example.label}
+                          type="button"
+                          className="rounded-full border border-border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-foreground/40 hover:bg-accent hover:text-foreground"
+                          onClick={() => applyStarterTaskExample(example)}
+                        >
+                          {example.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
                   <div>
