@@ -64,7 +64,7 @@ export function HttpConfigFields({
           }
           immediate
           className={inputClass}
-          placeholder="https://hermes-agent-umi2.srv1617039.hstgr.cloud/thomas-bridge/v1/runs"
+          placeholder="https://your-bridge.example/v1/runs"
         />
       </Field>
 
@@ -118,7 +118,7 @@ export function HttpConfigFields({
 
       <Field
         label="Headers JSON"
-        hint={help.httpHeadersJson ?? 'JSON object of HTTP headers. Use ${env:NAME} to reference env-binding values without persisting secrets in adapter config. Example: {"Authorization": "Bearer ${env:BRIDGE_TOKEN}"}'}
+        hint={help.httpHeadersJson ?? 'JSON object of HTTP headers. Use ${env:NAME} to reference env-binding values without persisting secrets in adapter config. Example: {"X-Bridge-Token": "${env:BRIDGE_TOKEN}"}'}
       >
         <DraftTextarea
           value={
@@ -135,7 +135,7 @@ export function HttpConfigFields({
           }
           immediate
           minRows={4}
-          placeholder={'{\n  "Authorization": "Bearer ${env:BRIDGE_TOKEN}",\n  "Content-Type": "application/json"\n}'}
+          placeholder={'{\n  "X-Bridge-Token": "${env:BRIDGE_TOKEN}",\n  "Content-Type": "application/json"\n}'}
         />
       </Field>
 

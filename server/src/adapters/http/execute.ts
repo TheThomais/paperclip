@@ -2,8 +2,15 @@ import type { AdapterExecutionContext, AdapterExecutionResult } from "../types.j
 import { asString, asNumber, parseObject } from "../utils.js";
 
 const ENV_REFERENCE_RE = /\$\{env:([A-Za-z_][A-Za-z0-9_]*)\}/g;
-const SENSITIVE_HTTP_HEADER_RE = /^(authorization|cookie|proxy-authorization|x-api-key|x-auth-token|x-access-token)$/i;
+const SENSITIVE_HTTP_HEADER_RE = /^(authorization|cookie|proxy-authorization|x-api-key|x-auth-token|x-access-token|x-bridge-token)$/i;
 const SENSITIVE_HEADER_TEMPLATE_RE = /^(?:Bearer\s+)?\$\{env:[A-Za-z_][A-Za-z0-9_]*\}$/;
+const PURE_ENV_HEADER_TEMPLATE_RE = /^\$\{env:[A-Za-z_][A-Za-z0-9_]*\}$/;
+
+function isAllowedSensitiveHeaderTemplate(key: string, value: string): boolean {
+  const trimmed = value.trim();
+  if (/^x-bridge-token$/i.test(key)) return PURE_ENV_HEADER_TEMPLATE_RE.test(trimmed);
+  return SENSITIVE_HEADER_TEMPLATE_RE.test(trimmed);
+}
 
 function interpolateEnvReferences(value: string, env: Record<string, unknown>): string {
   return value.replace(ENV_REFERENCE_RE, (_match, key: string) => {
@@ -22,7 +29,7 @@ function parseHeaders(headersValue: unknown): Record<string, string> {
     if (typeof value !== "string") {
       throw new Error(`HTTP header ${key} must be a string`);
     }
-    if (SENSITIVE_HTTP_HEADER_RE.test(key) && !SENSITIVE_HEADER_TEMPLATE_RE.test(value.trim())) {
+    if (SENSITIVE_HTTP_HEADER_RE.test(key) && !isAllowedSensitiveHeaderTemplate(key, value)) {
       throw new Error(`Sensitive HTTP header ${key} must use an env reference such as \${env:BRIDGE_TOKEN}`);
     }
     headers[key] = value;

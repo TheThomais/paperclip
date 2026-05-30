@@ -4,10 +4,17 @@ const DEFAULT_HTTP_METHOD = "POST";
 const DEFAULT_HTTP_TIMEOUT_MS = 15000;
 const MAX_HTTP_TIMEOUT_MS = 900000;
 const ALLOWED_HTTP_METHODS = new Set(["DELETE", "OPTIONS", "PATCH", "POST", "PUT"]);
-const SENSITIVE_HTTP_HEADER_RE = /^(authorization|cookie|proxy-authorization|x-api-key|x-auth-token|x-access-token)$/i;
+const SENSITIVE_HTTP_HEADER_RE = /^(authorization|cookie|proxy-authorization|x-api-key|x-auth-token|x-access-token|x-bridge-token)$/i;
 const ENV_REFERENCE_RE = /\$\{env:[A-Za-z_][A-Za-z0-9_]*\}/;
 const SENSITIVE_HEADER_TEMPLATE_RE = /^(?:Bearer\s+)?\$\{env:[A-Za-z_][A-Za-z0-9_]*\}$/;
+const PURE_ENV_HEADER_TEMPLATE_RE = /^\$\{env:[A-Za-z_][A-Za-z0-9_]*\}$/;
 const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function isAllowedSensitiveHeaderTemplate(key: string, value: string): boolean {
+  const trimmed = value.trim();
+  if (/^x-bridge-token$/i.test(key)) return PURE_ENV_HEADER_TEMPLATE_RE.test(trimmed);
+  return SENSITIVE_HEADER_TEMPLATE_RE.test(trimmed);
+}
 
 export function normalizeHttpMethod(value: string | undefined): string {
   const method = value?.trim().toUpperCase() || DEFAULT_HTTP_METHOD;
@@ -34,7 +41,7 @@ export function parseHeadersObject(value: string | undefined): Record<string, st
     if (typeof headerValue !== "string") {
       throw new Error(`HTTP header ${key} must be a string`);
     }
-    if (SENSITIVE_HTTP_HEADER_RE.test(key) && !SENSITIVE_HEADER_TEMPLATE_RE.test(headerValue.trim())) {
+    if (SENSITIVE_HTTP_HEADER_RE.test(key) && !isAllowedSensitiveHeaderTemplate(key, headerValue)) {
       throw new Error(`Sensitive HTTP header ${key} must use an env reference such as \${env:BRIDGE_TOKEN}`);
     }
   }
