@@ -19,12 +19,21 @@ const TEMPLATE_BEST_PRACTICES = [
   "Agent teams should coordinate through tasks and visible artifacts, not hidden agent-to-agent chatter or comments that say output exists elsewhere.",
   "Victoria provides the article-quality review lane: research-first, evidence-based, registry-aware, proactive, and top-1% useful for HLT students.",
 ] as const;
+
+const THOMAS_BRIDGE_ENV = {
+  url: "PAPERCLIP_THOMAS_BRIDGE_URL",
+  token: "PAPERCLIP_THOMAS_BRIDGE_TOKEN",
+} as const;
+
+const THOMAS_BRIDGE_SETUP_NOTE =
+  "Before running this Article Factory agent, bind PAPERCLIP_THOMAS_BRIDGE_TOKEN to a company-local Thomas bridge secret. Do not reuse a secret from another company.";
+
 const DEFAULT_HTTP_AGENT_CONFIG = {
-  url: "${env:PAPERCLIP_THOMAS_BRIDGE_URL}",
+  url: `\${env:${THOMAS_BRIDGE_ENV.url}}`,
   method: "POST",
   headers: {
     "Content-Type": "application/json",
-    "X-Bridge-Token": "${env:PAPERCLIP_THOMAS_BRIDGE_TOKEN}",
+    "X-Bridge-Token": `\${env:${THOMAS_BRIDGE_ENV.token}}`,
   },
   timeoutMs: 5_400_000,
   payloadTemplate: {
@@ -32,8 +41,8 @@ const DEFAULT_HTTP_AGENT_CONFIG = {
     prompt: READABLE_DELIVERABLE_RULE,
   },
   env: {
-    PAPERCLIP_THOMAS_BRIDGE_URL: "http://127.0.0.1:9119/v1/runs",
-    PAPERCLIP_THOMAS_BRIDGE_TOKEN: "${env:PAPERCLIP_THOMAS_BRIDGE_TOKEN}",
+    [THOMAS_BRIDGE_ENV.url]: "http://127.0.0.1:9119/v1/runs",
+    [THOMAS_BRIDGE_ENV.token]: `\${env:${THOMAS_BRIDGE_ENV.token}}`,
   },
 } as const;
 
@@ -68,6 +77,7 @@ type TeamTemplate = {
   };
   agents: AgentTemplate[];
   issues: IssueTemplate[];
+  agentConfig: typeof DEFAULT_HTTP_AGENT_CONFIG;
   sourceRefs: readonly string[];
   bestPractices: readonly string[];
 };
@@ -86,6 +96,7 @@ export const HLT_ARTICLE_FACTORY_TEMPLATE: TeamTemplate = {
   },
   sourceRefs: TEMPLATE_SOURCE_REFS,
   bestPractices: TEMPLATE_BEST_PRACTICES,
+  agentConfig: DEFAULT_HTTP_AGENT_CONFIG,
   agents: [
     {
       name: "Article Lead",
@@ -290,6 +301,9 @@ export function teamTemplateRoutes(db: Db) {
         metadata: {
           teamTemplateId: template.id,
           humanPurpose: agentTemplate.capabilities,
+          bridgeSetupRequired: true,
+          bridgeSetupNote: THOMAS_BRIDGE_SETUP_NOTE,
+          bridgeEnv: THOMAS_BRIDGE_ENV,
           sourceRefs: template.sourceRefs,
           bestPractices: template.bestPractices,
         },

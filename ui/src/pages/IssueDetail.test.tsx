@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { Agent, Issue, IssueTreeControlPreview, IssueTreeHold } from "@paperclipai/shared";
+import type { Agent, Issue, IssueDocumentSummary, IssueTreeControlPreview, IssueTreeHold } from "@paperclipai/shared";
 import { act, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -392,6 +392,18 @@ function createIssue(overrides: Partial<Issue> = {}): Issue {
     documentSummaries: [],
     ...overrides,
   } as Issue;
+}
+
+function createDocumentSummary(overrides: Partial<IssueDocumentSummary> = {}): IssueDocumentSummary {
+  return {
+    key: "article-draft",
+    title: "Article draft",
+    format: "markdown",
+    latestRevisionId: "rev-article-draft",
+    latestRevisionNumber: 1,
+    updatedAt: new Date("2026-04-21T00:10:00.000Z"),
+    ...overrides,
+  } as IssueDocumentSummary;
 }
 
 function createAgent(overrides: Partial<Agent> = {}): Agent {
@@ -867,6 +879,48 @@ describe("IssueDetail", () => {
     await flushReact();
 
     expect(container.querySelector('[data-status-icon-state="covered"]')?.textContent).toBe("blocked");
+  });
+
+  it("keeps readable deliverables above documents, run logs, and chat transcript", async () => {
+    mockIssuesApi.get.mockResolvedValue(createIssue({
+      status: "done",
+      documentSummaries: [createDocumentSummary({ title: "Final article draft" })],
+    }));
+    mockActivityApi.runsForIssue.mockResolvedValue([
+      {
+        id: "run-1",
+        companyId: "company-1",
+        issueId: "issue-1",
+        agentId: "agent-1",
+        status: "completed",
+        resultJson: null,
+        startedAt: new Date("2026-04-21T00:00:00.000Z"),
+        completedAt: new Date("2026-04-21T00:05:00.000Z"),
+      },
+    ]);
+
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <IssueDetail />
+        </QueryClientProvider>,
+      );
+    });
+
+    await waitForAssertion(() => {
+      const text = container.textContent ?? "";
+      const outputIndex = text.indexOf("Readable output");
+      expect(outputIndex).toBeGreaterThanOrEqual(0);
+      expect(text.indexOf("Final article draft")).toBeGreaterThan(outputIndex);
+      const documentsIndex = text.indexOf("Documents");
+      const runsIndex = text.indexOf("Runs");
+      const chatIndex = text.indexOf("Chat thread");
+      expect(documentsIndex).toBeGreaterThanOrEqual(0);
+      expect(chatIndex).toBeGreaterThanOrEqual(0);
+      expect(outputIndex).toBeLessThan(documentsIndex);
+      if (runsIndex >= 0) expect(outputIndex).toBeLessThan(runsIndex);
+      expect(outputIndex).toBeLessThan(chatIndex);
+    });
   });
 
   it("shows a human article creation plan when starter context is attached", async () => {
