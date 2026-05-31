@@ -9,6 +9,7 @@ import type { PluginEvent } from "@paperclipai/plugin-sdk";
 import {
   AGENT_DEFAULT_MAX_CONCURRENT_RUNS,
   ISSUE_CONTINUATION_SUMMARY_DOCUMENT_KEY,
+  ONBOARDING_STARTER_CONTEXT_DOCUMENT_KEY,
   MODEL_PROFILE_KEYS,
   isEnvironmentDriverSupportedForAdapter,
   type BillingType,
@@ -110,6 +111,7 @@ import {
   getIssueContinuationSummaryDocument,
   refreshIssueContinuationSummary,
 } from "./issue-continuation-summary.js";
+import { documentService } from "./documents.js";
 import { executionWorkspaceService, mergeExecutionWorkspaceConfig } from "./execution-workspaces.js";
 import { workspaceOperationService } from "./workspace-operations.js";
 import { isProcessGroupAlive, terminateLocalService } from "./local-service-supervisor.js";
@@ -1884,18 +1886,40 @@ export function mergeCoalescedContextSnapshot(
   return merged;
 }
 
-async function buildPaperclipWakePayload(input: {
+type PaperclipWakeContextDocument = {
+  key: string;
+  title: string | null;
+  body: string;
+  updatedAt: Date;
+};
+
+function compactPaperclipWakeContextDocument(doc: PaperclipWakeContextDocument | null) {
+  if (!doc) return null;
+  return {
+    key: doc.key,
+    title: doc.title,
+    body: doc.body.length > 4_000 ? doc.body.slice(0, 4_000) : doc.body,
+    bodyTruncated: doc.body.length > 4_000,
+    updatedAt: doc.updatedAt.toISOString(),
+  };
+}
+
+function asPaperclipWakeContextDocument(doc: (Partial<PaperclipWakeContextDocument> & { body?: string }) | null) {
+  if (!doc || typeof doc.body !== "string" || !(doc.updatedAt instanceof Date)) return null;
+  return {
+    key: typeof doc.key === "string" ? doc.key : "",
+    title: typeof doc.title === "string" ? doc.title : null,
+    body: doc.body,
+    updatedAt: doc.updatedAt,
+  };
+}
+
+export async function buildPaperclipWakePayload(input: {
   db: Db;
   companyId: string;
   contextSnapshot: Record<string, unknown>;
-  continuationSummary?:
-    | {
-        key: string;
-        title: string | null;
-        body: string;
-        updatedAt: Date;
-      }
-    | null;
+  continuationSummary?: PaperclipWakeContextDocument | null;
+  onboardingStarterContext?: PaperclipWakeContextDocument | null;
   issueSummary?:
     | {
         id: string;
@@ -1911,6 +1935,7 @@ async function buildPaperclipWakePayload(input: {
   const commentIds = extractWakeCommentIds(input.contextSnapshot);
   const issueId = readNonEmptyString(input.contextSnapshot.issueId);
   const continuationSummary = input.continuationSummary ?? null;
+  const onboardingStarterContext = input.onboardingStarterContext ?? null;
   const issueSummary =
     input.issueSummary ??
     (issueId
@@ -2041,18 +2066,8 @@ async function buildPaperclipWakePayload(input: {
       ? input.contextSnapshot.unresolvedBlockerSummaries
       : [],
     executionStage: Object.keys(executionStage).length > 0 ? executionStage : null,
-    continuationSummary: continuationSummary
-      ? {
-          key: continuationSummary.key,
-          title: continuationSummary.title,
-          body:
-            continuationSummary.body.length > 4_000
-              ? continuationSummary.body.slice(0, 4_000)
-              : continuationSummary.body,
-          bodyTruncated: continuationSummary.body.length > 4_000,
-          updatedAt: continuationSummary.updatedAt.toISOString(),
-        }
-      : null,
+    continuationSummary: compactPaperclipWakeContextDocument(continuationSummary),
+    onboardingStarterContext: compactPaperclipWakeContextDocument(onboardingStarterContext),
     commentIds,
     latestCommentId: commentIds[commentIds.length - 1] ?? null,
     comments,
@@ -6928,6 +6943,11 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     const continuationSummary = issueRef
       ? await getIssueContinuationSummaryDocument(db, issueRef.id)
       : null;
+    const onboardingStarterContext = asPaperclipWakeContextDocument(
+      issueRef
+        ? await documentService(db).getIssueDocumentByKey(issueRef.id, ONBOARDING_STARTER_CONTEXT_DOCUMENT_KEY)
+        : null,
+    );
     if (continuationSummary) {
       context.paperclipContinuationSummary = {
         key: continuationSummary.key,
@@ -6942,7 +6962,8 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       db,
       companyId: agent.companyId,
       contextSnapshot: context,
-      continuationSummary,
+      continuationSummary: asPaperclipWakeContextDocument(continuationSummary),
+      onboardingStarterContext,
       issueSummary: issueRef
         ? {
             id: issueRef.id,
