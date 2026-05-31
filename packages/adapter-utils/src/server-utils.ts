@@ -390,6 +390,7 @@ type PaperclipWakePayload = {
   unresolvedBlockerSummaries: PaperclipWakeBlockerSummary[];
   executionStage: PaperclipWakeExecutionStage | null;
   continuationSummary: PaperclipWakeContinuationSummary | null;
+  onboardingStarterContext: PaperclipWakeContinuationSummary | null;
   livenessContinuation: PaperclipWakeLivenessContinuation | null;
   interactionKind: string | null;
   interactionStatus: string | null;
@@ -568,6 +569,7 @@ export function normalizePaperclipWakePayload(value: unknown): PaperclipWakePayl
     : [];
   const executionStage = normalizePaperclipWakeExecutionStage(payload.executionStage);
   const continuationSummary = normalizePaperclipWakeContinuationSummary(payload.continuationSummary);
+  const onboardingStarterContext = normalizePaperclipWakeContinuationSummary(payload.onboardingStarterContext);
   const livenessContinuation = normalizePaperclipWakeLivenessContinuation(payload.livenessContinuation);
   const childIssueSummaries = Array.isArray(payload.childIssueSummaries)
     ? payload.childIssueSummaries
@@ -586,7 +588,7 @@ export function normalizePaperclipWakePayload(value: unknown): PaperclipWakePayl
     : [];
 
   const activeTreeHold = normalizePaperclipWakeTreeHoldSummary(payload.activeTreeHold);
-  if (comments.length === 0 && commentIds.length === 0 && childIssueSummaries.length === 0 && unresolvedBlockerIssueIds.length === 0 && unresolvedBlockerSummaries.length === 0 && !activeTreeHold && !executionStage && !continuationSummary && !livenessContinuation && !normalizePaperclipWakeIssue(payload.issue)) {
+  if (comments.length === 0 && commentIds.length === 0 && childIssueSummaries.length === 0 && unresolvedBlockerIssueIds.length === 0 && unresolvedBlockerSummaries.length === 0 && !activeTreeHold && !executionStage && !continuationSummary && !onboardingStarterContext && !livenessContinuation && !normalizePaperclipWakeIssue(payload.issue)) {
     return null;
   }
 
@@ -601,6 +603,7 @@ export function normalizePaperclipWakePayload(value: unknown): PaperclipWakePayl
     unresolvedBlockerSummaries,
     executionStage,
     continuationSummary,
+    onboardingStarterContext,
     livenessContinuation,
     interactionKind: asString(payload.interactionKind, "").trim() || null,
     interactionStatus: asString(payload.interactionStatus, "").trim() || null,
@@ -780,6 +783,18 @@ export function renderPaperclipWakePrompt(
     );
     if (normalized.continuationSummary.bodyTruncated) {
       lines.push("[continuation summary truncated]");
+    }
+  }
+
+  if (normalized.onboardingStarterContext) {
+    lines.push(
+      "",
+      "Onboarding starter context:",
+      "Use this as plain task context. Do not expose internal refs unless needed, do not publish without approval, and prefer existing Katailyst/Create workflows over inventing a new flow.",
+      normalized.onboardingStarterContext.body,
+    );
+    if (normalized.onboardingStarterContext.bodyTruncated) {
+      lines.push("[onboarding starter context truncated]");
     }
   }
 

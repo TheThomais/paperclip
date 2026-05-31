@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildPaperclipTaskMarkdown,
+  buildPaperclipWakePayload,
   mergeCoalescedContextSnapshot,
   summarizeHeartbeatRunContextSnapshot,
   summarizeHeartbeatRunListResultJson,
@@ -76,6 +77,43 @@ describe("buildPaperclipTaskMarkdown", () => {
 
     expect(commentWake).toContain("Update the plan only. Do not write code or perform implementation work.");
     expect(commentWake).not.toContain("Create child issues from the approved plan only");
+  });
+});
+
+describe("buildPaperclipWakePayload", () => {
+  it("carries onboarding starter context into the structured wake payload", async () => {
+    const payload = await buildPaperclipWakePayload({
+      db: {} as never,
+      companyId: "company-1",
+      contextSnapshot: {
+        issueId: "issue-1",
+        wakeReason: "issue_assigned",
+      },
+      issueSummary: {
+        id: "issue-1",
+        identifier: "PAP-2200",
+        title: "Draft and review an HLT article",
+        status: "in_progress",
+        priority: "medium",
+        workMode: "execution",
+      },
+      onboardingStarterContext: {
+        key: "onboarding_starter_context",
+        title: "Starter context",
+        body: "Use existing Katailyst Make Article workflow.",
+        updatedAt: new Date("2026-05-30T23:00:00.000Z"),
+      },
+    });
+
+    expect(payload).toMatchObject({
+      onboardingStarterContext: {
+        key: "onboarding_starter_context",
+        title: "Starter context",
+        body: "Use existing Katailyst Make Article workflow.",
+        bodyTruncated: false,
+        updatedAt: "2026-05-30T23:00:00.000Z",
+      },
+    });
   });
 });
 

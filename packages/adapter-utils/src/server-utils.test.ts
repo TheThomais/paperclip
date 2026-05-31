@@ -702,6 +702,41 @@ describe("renderPaperclipWakePrompt", () => {
     expect(prompt).toContain("PAP-101 Implement helper (done)");
     expect(prompt).toContain("Added the helper route and tests.");
   });
+
+  it("renders onboarding starter context as natural-language agent guidance", () => {
+    const payload = {
+      reason: "issue_assigned",
+      issue: {
+        id: "issue-1",
+        identifier: "PAP-2200",
+        title: "Draft and review an HLT article",
+        status: "in_progress",
+      },
+      onboardingStarterContext: {
+        key: "onboarding_starter_context",
+        title: "Starter context",
+        body: [
+          "# Draft and review an HLT article",
+          "",
+          "Use existing Katailyst article factory refs.",
+          "Keep MasteryPublishing output draft-only until approval.",
+        ].join("\n"),
+        updatedAt: "2026-05-30T23:00:00.000Z",
+      },
+    };
+
+    expect(JSON.parse(stringifyPaperclipWakePayload(payload) ?? "{}")).toMatchObject({
+      onboardingStarterContext: {
+        key: "onboarding_starter_context",
+        body: expect.stringContaining("Katailyst article factory refs"),
+      },
+    });
+
+    const prompt = renderPaperclipWakePrompt(payload);
+    expect(prompt).toContain("Onboarding starter context:");
+    expect(prompt).toContain("Use existing Katailyst article factory refs.");
+    expect(prompt).toContain("draft-only until approval");
+  });
 });
 
 describe("applyPaperclipWorkspaceEnv", () => {
