@@ -73,4 +73,14 @@ describe("HLT team templates", () => {
     expect(HLT_ARTICLE_FACTORY_TEMPLATE.bestPractices.join(" ")).toContain("Hermes works best");
     expect(HLT_ARTICLE_FACTORY_TEMPLATE.bestPractices.join(" ")).toContain("Victoria provides the article-quality review lane");
   });
+
+  it("keeps Thomas bridge agents on a pure env-token contract with long-run timeouts", () => {
+    const httpConfig = HLT_ARTICLE_FACTORY_TEMPLATE.agentConfig;
+    expect(httpConfig.url).toBe("${env:PAPERCLIP_THOMAS_BRIDGE_URL}");
+    expect(httpConfig.headers["X-Bridge-Token"]).toBe("${env:PAPERCLIP_THOMAS_BRIDGE_TOKEN}");
+    expect(httpConfig.headers["X-Bridge-Token"]).not.toMatch(/^Bearer\s+/i);
+    expect(httpConfig.timeoutMs).toBe(5_400_000);
+    expect(httpConfig.payloadTemplate.timeoutSec).toBe(5_400);
+    expect(httpConfig.env.PAPERCLIP_THOMAS_BRIDGE_TOKEN).toBe("${env:PAPERCLIP_THOMAS_BRIDGE_TOKEN}");
+  });
 });
