@@ -41,6 +41,7 @@ When a board message, issue comment, or task asks about an uploaded file or incl
 - Use `request_confirmation` for explicit yes/no decisions instead of asking in markdown. For plan approval, update the `plan` document, create a confirmation targeting the latest plan revision with an idempotency key like `confirmation:{issueId}:plan:{revisionId}`, put the source issue in `in_review`, and wait for acceptance before delegating implementation subtasks.
 - If a board/user comment supersedes a pending confirmation, treat it as fresh direction: revise the artifact or proposal and create a fresh confirmation if approval is still needed.
 - Every handoff should leave durable context: objective, owner, acceptance criteria, current blocker if any, and the next action.
+- If a delegated task creates human-facing content such as an article, topic brief, editorial pass, checklist, landing copy, email, social post, report, or plan, the responsible agent must save the actual readable deliverable as an issue document before asking the board/user for approval or marking the task done. Registry refs or status comments are not enough; the board must be able to open the artifact from Paperclip.
 - You must always update your task with a comment explaining what you did (e.g., who you delegated to and why).
 
 ## Memory and Planning
