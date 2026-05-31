@@ -155,7 +155,18 @@ async function checkLiveBundle(): Promise<OpsStatusCheck> {
 
 async function checkThomasBridge(): Promise<OpsStatusCheck> {
   const updatedAt = nowIso();
-  const bridgeUrl = process.env.THOMAS_BRIDGE_HEALTH_URL?.trim() || DEFAULT_THOMAS_BRIDGE_URL;
+  const configuredBridgeUrl = process.env.THOMAS_BRIDGE_HEALTH_URL?.trim();
+  const bridgeUrl = configuredBridgeUrl || DEFAULT_THOMAS_BRIDGE_URL;
+  if (!configuredBridgeUrl && process.env.RENDER) {
+    return {
+      id: "thomas-bridge",
+      label: "Thomas bridge",
+      status: "unknown",
+      summary: "Thomas bridge checks run from the Thomas watchdog.",
+      detail: "Set THOMAS_BRIDGE_HEALTH_URL here only if the bridge has a safe network health URL.",
+      updatedAt,
+    };
+  }
   try {
     const { response, text } = await fetchText(bridgeUrl, undefined, 5_000);
     if (!response.ok) {
