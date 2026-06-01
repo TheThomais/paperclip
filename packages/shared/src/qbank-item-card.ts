@@ -222,18 +222,16 @@ function buildTitle(questionId: number | string, questionText: string): string {
 }
 
 function cleanHtml(value: string): string {
-  return decodeHtmlEntities(
-    value
-      .replace(/<script[\s\S]*?<\/script>/gi, " ")
-      .replace(/<style[\s\S]*?<\/style>/gi, " ")
-      .replace(/<br\s*\/?>/gi, " ")
-      .replace(/<\/p>/gi, " ")
-      .replace(/<\/li>/gi, "; ")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\s*;\s*$/g, "")
-      .replace(/\s+/g, " ")
-      .trim(),
-  );
+  return decodeHtmlEntities(value)
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<\/p>/gi, " ")
+    .replace(/<\/li>/gi, "; ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s*;\s*$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function decodeHtmlEntities(value: string): string {

@@ -83,4 +83,24 @@ describe("QBank item card formatting", () => {
     expect(card.markdown).not.toContain("<p>");
     expect(card.markdown).not.toMatch(/x-mcp-token|PARTNER_API_KEY|cffefcae/i);
   });
+
+  it("strips entity-encoded HTML before rendering markdown", () => {
+    const card = formatQBankItemCard({
+      appId: 3,
+      item: {
+        id: 9001,
+        question: "&lt;img src=x onerror=alert(1)&gt;Which finding matters?",
+        rationale: "&lt;script&gt;alert(1)&lt;/script&gt;Treat airway first.",
+        key_takeaway: "Use &lt;strong&gt;clinical&lt;/strong&gt; priorities.",
+        answers: [{ text: "&lt;em&gt;Airway&lt;/em&gt;", correct: true }],
+      },
+    });
+
+    expect(card.markdown).toContain("Which finding matters?");
+    expect(card.markdown).toContain("Treat airway first.");
+    expect(card.markdown).toContain("Use clinical priorities.");
+    expect(card.markdown).toContain("Correct answer: Airway");
+    expect(card.markdown).not.toMatch(/<\/?(?:img|script|strong|em)\b/i);
+    expect(card.markdown).not.toContain("onerror");
+  });
 });
