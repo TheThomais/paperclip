@@ -205,6 +205,111 @@ describeEmbeddedPostgres("secretService", () => {
     expect(JSON.stringify(events)).not.toContain("runtime-secret");
   });
 
+  it("repairs portable runtime env references that point at another company's same-key secret", async () => {
+    const sourceCompanyId = await seedCompany("Template Source");
+    const targetCompanyId = await seedCompany("Clean Pilot");
+    const svc = secretService(db);
+    const foreignSecret = await svc.create(sourceCompanyId, {
+      name: `bridge-token-${randomUUID()}`,
+      key: "THOMAS_BRIDGE_TOKEN",
+      provider: "local_encrypted",
+      value: "foreign-token",
+    });
+    const localSecret = await svc.create(targetCompanyId, {
+      name: `bridge-token-${randomUUID()}`,
+      key: "THOMAS_BRIDGE_TOKEN",
+      provider: "local_encrypted",
+      value: "local-token",
+    });
+    const env = {
+      THOMAS_BRIDGE_TOKEN: {
+        type: "secret_ref" as const,
+        secretId: foreignSecret.id,
+        version: "latest" as const,
+      },
+    };
+
+    const resolved = await svc.resolveAdapterConfigForRuntime(targetCompanyId, { env }, {
+      consumerType: "agent",
+      consumerId: "media-producer-agent",
+      actorType: "agent",
+      actorId: "media-producer-agent",
+    });
+
+    expect((resolved.config.env as Record<string, string>).THOMAS_BRIDGE_TOKEN).toBe("local-token");
+    expect(resolved.manifest[0]).toMatchObject({
+      secretId: localSecret.id,
+      secretKey: "THOMAS_BRIDGE_TOKEN",
+      envKey: "THOMAS_BRIDGE_TOKEN",
+    });
+    const repairedBinding = await db
+      .select()
+      .from(companySecretBindings)
+      .where(eq(companySecretBindings.targetId, "media-producer-agent"))
+      .then((rows) => rows[0]);
+    expect(repairedBinding).toMatchObject({
+      companyId: targetCompanyId,
+      secretId: localSecret.id,
+      configPath: "env.THOMAS_BRIDGE_TOKEN",
+    });
+  });
+
+  it("does not repair cross-company runtime refs without a bound runtime context", async () => {
+    const sourceCompanyId = await seedCompany("Template Source");
+    const targetCompanyId = await seedCompany("Clean Pilot");
+    const svc = secretService(db);
+    const foreignSecret = await svc.create(sourceCompanyId, {
+      name: `bridge-token-${randomUUID()}`,
+      key: "THOMAS_BRIDGE_TOKEN",
+      provider: "local_encrypted",
+      value: "foreign-token",
+    });
+    await svc.create(targetCompanyId, {
+      name: `bridge-token-${randomUUID()}`,
+      key: "THOMAS_BRIDGE_TOKEN",
+      provider: "local_encrypted",
+      value: "local-token",
+    });
+
+    await expect(
+      svc.resolveSecretValue(targetCompanyId, foreignSecret.id, "latest"),
+    ).rejects.toThrow(/same company/i);
+  });
+
+  it("does not repair cross-company runtime refs when the target company has no same-key secret", async () => {
+    const sourceCompanyId = await seedCompany("Template Source");
+    const targetCompanyId = await seedCompany("Clean Pilot");
+    const svc = secretService(db);
+    const foreignSecret = await svc.create(sourceCompanyId, {
+      name: `bridge-token-${randomUUID()}`,
+      key: "THOMAS_BRIDGE_TOKEN",
+      provider: "local_encrypted",
+      value: "foreign-token",
+    });
+
+    await expect(
+      svc.resolveAdapterConfigForRuntime(targetCompanyId, {
+        env: {
+          THOMAS_BRIDGE_TOKEN: {
+            type: "secret_ref" as const,
+            secretId: foreignSecret.id,
+            version: "latest" as const,
+          },
+        },
+      }, {
+        consumerType: "agent",
+        consumerId: "media-producer-agent",
+        actorType: "agent",
+        actorId: "media-producer-agent",
+      }),
+    ).rejects.toThrow(/same company/i);
+    const repairedBindings = await db
+      .select()
+      .from(companySecretBindings)
+      .where(eq(companySecretBindings.targetId, "media-producer-agent"));
+    expect(repairedBindings).toHaveLength(0);
+  });
+
   it("scopes env binding sync deletes to the env path prefix", async () => {
     const companyId = await seedCompany();
     const svc = secretService(db);
