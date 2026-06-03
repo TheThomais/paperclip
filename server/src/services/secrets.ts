@@ -365,12 +365,89 @@ export function secretService(db: Db) {
     });
   }
 
+  async function getActiveSecretByKey(companyId: string, key: string) {
+    return db
+      .select()
+      .from(companySecrets)
+      .where(and(
+        eq(companySecrets.companyId, companyId),
+        eq(companySecrets.key, key),
+        eq(companySecrets.status, "active"),
+      ))
+      .then((rows) => rows[0] ?? null);
+  }
+
   async function assertSecretInCompany(companyId: string, secretId: string) {
     const secret = await getById(secretId);
     if (!secret) throw notFound("Secret not found");
     if (secret.status === "deleted") throw notFound("Secret not found");
     if (secret.companyId !== companyId) throw unprocessable("Secret must belong to same company");
     return secret;
+  }
+
+  async function resolveRuntimeSecretForCompany(
+    companyId: string,
+    secretId: string,
+    context: SecretConsumerContext | undefined,
+  ) {
+    const secret = await getById(secretId);
+    if (!secret) throw notFound("Secret not found");
+    if (secret.status === "deleted") throw notFound("Secret not found");
+    if (secret.companyId === companyId) {
+      return { secret, repairedFromSecretId: null as string | null };
+    }
+
+    if (!context?.configPath) {
+      throw unprocessable("Secret must belong to same company");
+    }
+    const localSecret = await getActiveSecretByKey(companyId, secret.key);
+    if (!localSecret) {
+      throw unprocessable("Secret must belong to same company");
+    }
+    return { secret: localSecret, repairedFromSecretId: secret.id };
+  }
+
+  async function repairRuntimeBindingForCompany(input: {
+    companyId: string;
+    fromSecretId: string;
+    toSecretId: string;
+    context: SecretConsumerContext | undefined;
+  }) {
+    const context = input.context;
+    if (!context?.configPath) return;
+    await db
+      .update(companySecretBindings)
+      .set({ secretId: input.toSecretId, versionSelector: "latest", updatedAt: new Date() })
+      .where(
+        and(
+          eq(companySecretBindings.companyId, input.companyId),
+          eq(companySecretBindings.secretId, input.fromSecretId),
+          eq(companySecretBindings.targetType, context.consumerType),
+          eq(companySecretBindings.targetId, context.consumerId),
+          eq(companySecretBindings.configPath, context.configPath),
+        ),
+      )
+      .catch(() => undefined);
+    const existing = await getBinding({
+      companyId: input.companyId,
+      secretId: input.toSecretId,
+      consumerType: context.consumerType,
+      consumerId: context.consumerId,
+      configPath: context.configPath,
+    });
+    if (existing) return;
+    await db
+      .insert(companySecretBindings)
+      .values({
+        companyId: input.companyId,
+        secretId: input.toSecretId,
+        targetType: context.consumerType,
+        targetId: context.consumerId,
+        configPath: context.configPath,
+        versionSelector: "latest",
+        required: true,
+      })
+      .catch(() => undefined);
   }
 
   async function getProviderConfigById(id: string) {
@@ -495,13 +572,21 @@ export function secretService(db: Db) {
     version: number | "latest",
     context?: SecretConsumerContext,
   ): Promise<RuntimeSecretResolution> {
-    const secret = await assertSecretInCompany(companyId, secretId);
+    const { secret, repairedFromSecretId } = await resolveRuntimeSecretForCompany(companyId, secretId, context);
     const resolvedVersion = version === "latest" ? secret.latestVersion : version;
     const providerId = secret.provider as SecretProvider;
     const configPath = context?.configPath ?? null;
     try {
       if (secret.status !== "active") {
         throw unprocessable("Secret is not active");
+      }
+      if (repairedFromSecretId) {
+        await repairRuntimeBindingForCompany({
+          companyId,
+          fromSecretId: repairedFromSecretId,
+          toSecretId: secret.id,
+          context,
+        });
       }
       await assertBindingContext(companyId, secret.id, context);
       const versionRow = await getSecretVersion(secret.id, resolvedVersion);
