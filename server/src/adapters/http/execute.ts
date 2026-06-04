@@ -51,6 +51,14 @@ const ENV_REFERENCE_RE = /\$\{env:([A-Za-z_][A-Za-z0-9_]*)\}/g;
 const SENSITIVE_HTTP_HEADER_RE = /^(authorization|cookie|proxy-authorization|x-api-key|x-auth-token|x-access-token|x-bridge-token)$/i;
 const SENSITIVE_HEADER_TEMPLATE_RE = /^(?:Bearer\s+)?\$\{env:[A-Za-z_][A-Za-z0-9_]*\}$/;
 const PURE_ENV_HEADER_TEMPLATE_RE = /^\$\{env:[A-Za-z_][A-Za-z0-9_]*\}$/;
+const PAPERCLIP_RUNTIME_ENV_KEYS = [
+  "PAPERCLIP_API_URL",
+  "PAPERCLIP_API_KEY",
+  "PAPERCLIP_RUN_ID",
+  "PAPERCLIP_AGENT_ID",
+  "PAPERCLIP_COMPANY_ID",
+  "PAPERCLIP_TASK_ID",
+] as const;
 
 function isAllowedSensitiveHeaderTemplate(key: string, value: string): boolean {
   const trimmed = value.trim();
@@ -83,6 +91,81 @@ function parseHeaders(headersValue: unknown): Record<string, string> {
   return headers;
 }
 
+function readNumber(...values: unknown[]): number | null {
+  for (const value of values) {
+    const parsed = asNumber(value, Number.NaN);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function readString(...values: unknown[]): string | null {
+  for (const value of values) {
+    const parsed = asString(value, "");
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+function readPaperclipApiUrl(config: Record<string, unknown>, env: Record<string, unknown>): string | null {
+  return readString(
+    config.paperclipApiUrl,
+    env.PAPERCLIP_API_URL,
+    process.env.PAPERCLIP_API_URL,
+    process.env.PAPERCLIP_PUBLIC_URL,
+    process.env.RENDER_EXTERNAL_URL,
+    process.env.BETTER_AUTH_URL,
+    process.env.BETTER_AUTH_BASE_URL,
+  );
+}
+
+function buildPaperclipRuntimeEnv(ctx: AdapterExecutionContext, env: Record<string, unknown>): Record<string, string> | null {
+  const { agent, runId, config, context, authToken } = ctx;
+  const paperclipIssue = parseObject(context.paperclipIssue);
+  const issueContext = parseObject(context.issue);
+  const apiUrl = readPaperclipApiUrl(config, env);
+  const apiKey = readString(env.PAPERCLIP_API_KEY, authToken);
+  const runtimeEnv: Partial<Record<(typeof PAPERCLIP_RUNTIME_ENV_KEYS)[number], string>> = {
+    ...(apiUrl ? { PAPERCLIP_API_URL: apiUrl } : {}),
+    ...(apiKey ? { PAPERCLIP_API_KEY: apiKey } : {}),
+    PAPERCLIP_RUN_ID: runId,
+    PAPERCLIP_AGENT_ID: agent.id,
+    ...(agent.companyId ? { PAPERCLIP_COMPANY_ID: agent.companyId } : {}),
+  };
+  const taskId = readString(context.issueId, paperclipIssue.id, issueContext.id);
+  if (taskId) runtimeEnv.PAPERCLIP_TASK_ID = taskId;
+
+  const presentEntries = Object.entries(runtimeEnv).filter(
+    (entry): entry is [(typeof PAPERCLIP_RUNTIME_ENV_KEYS)[number], string] =>
+      PAPERCLIP_RUNTIME_ENV_KEYS.includes(entry[0] as (typeof PAPERCLIP_RUNTIME_ENV_KEYS)[number]) &&
+      typeof entry[1] === "string" &&
+      entry[1].trim().length > 0,
+  );
+  if (presentEntries.length === 0) return null;
+  return Object.fromEntries(presentEntries);
+}
+
+function isBridgeExecutionResult(responseJson: Record<string, unknown> | null): responseJson is Record<string, unknown> {
+  if (!responseJson) return false;
+  return (
+    "exit_code" in responseJson ||
+    "exitCode" in responseJson ||
+    "timed_out" in responseJson ||
+    "timedOut" in responseJson ||
+    "stderr_tail" in responseJson ||
+    "stderrTail" in responseJson
+  );
+}
+
+function bridgeErrorMessage(status: number, responseJson: Record<string, unknown> | null, responseText: string): string {
+  const summary = readString(responseJson?.summary);
+  const error = readString(responseJson?.error, responseJson?.message);
+  const stderrTail = readString(responseJson?.stderr_tail, responseJson?.stderrTail);
+  const fallback = responseText.trim() ? responseText.slice(0, 1000) : null;
+  const detail = [error, summary, stderrTail ?? fallback].filter(Boolean).join(" — ");
+  return `HTTP invoke failed with status ${status}${detail ? `: ${detail}` : ""}`;
+}
+
 export function resolveHeaderTemplates(
   headers: Record<string, string>,
   env: Record<string, unknown>,
@@ -103,7 +186,14 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const env = parseObject(config.env);
   const resolvedHeaders = resolveHeaderTemplates(headers, env);
   const payloadTemplate = parseObject(config.payloadTemplate);
-  const body = { ...payloadTemplate, agentId: agent.id, runId, context };
+  const paperclipRuntimeEnv = buildPaperclipRuntimeEnv(ctx, env);
+  const body = {
+    ...payloadTemplate,
+    agentId: agent.id,
+    runId,
+    context,
+    ...(paperclipRuntimeEnv ? { runtimeEnv: paperclipRuntimeEnv } : {}),
+  };
 
   // Bounded retry on TRANSIENT transport failures only (connection drops /
   // 429 / 502 / 503 / 504). The Hermes bridge can briefly 502 or reset the
@@ -144,8 +234,20 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       }
 
       if (!res.ok) {
-        const detail = responseJson?.error ?? responseJson?.message ?? responseText.slice(0, 300);
-        const message = `HTTP invoke failed with status ${res.status}${detail ? `: ${String(detail)}` : ""}`;
+        const message = bridgeErrorMessage(res.status, responseJson, responseText);
+        if (isBridgeExecutionResult(responseJson)) {
+          const exitCode = readNumber(responseJson.exit_code, responseJson.exitCode);
+          const timedOut = responseJson.timed_out === true || responseJson.timedOut === true;
+          return {
+            exitCode,
+            signal: null,
+            timedOut,
+            errorMessage: message,
+            errorCode: timedOut ? "timeout" : "adapter_failed",
+            summary: readString(responseJson.summary) ?? message,
+            resultJson: responseJson,
+          };
+        }
         if (RETRYABLE_HTTP_STATUS.has(res.status) && attempt < maxAttempts) {
           lastError = new Error(message);
           retryFromAttempt = attempt;
